@@ -56,8 +56,6 @@ eye.scores = continuous.real.data.test(eye.data, "y", 100, 0, 50, c("glmnet","hs
 ####################################################################################
 
 ## Setup some synthetic data
-library(MASS)
-
 p = 350
 I = 1:20
 coef = c(3, -3)

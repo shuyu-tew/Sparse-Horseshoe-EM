@@ -788,3 +788,206 @@ E.neg.log.posterior <- function(Eb2, E.RSS, lambda2, tau2, sigma2, n, p)
 }
 
 
+em.predict <- function(object, newdata)
+{
+  # Build the fully specified formula using the covariates that were fitted
+  f <- stats::as.formula(paste("~",paste(attr(object$terms,"term.labels"),collapse="+")))
+  
+  # Extract the design matrix
+  X = stats::model.matrix(f, data=newdata)
+  X = as.matrix(X[,-1])
+  X = X[,object$I.keep]
+  n = nrow(X)
+  p = ncol(X)
+  
+  # Make predictions
+  yp = X %*% object$beta + as.numeric(object$beta0)
+  
+  # If GLM
+  if (object$model == "binomial")
+  {
+    yp = 1/(1+exp(-yp))
+  }
+  else if (object$model == "poisson")
+  {
+    yp = exp(yp)
+  }
+  
+  yp
+}
+
+# ==============================================================================
+# Horseshoe-like 
+# ==============================================================================
+
+HS.like.EM <- function(formula, data, n.iter = 1000, standardize = T, a = 1e5, tol = 1e-4)
+{
+  r = list()
+  
+  # -------------------------------------------------------------------    
+  # Process and set up the data from the model formula
+  r$terms <- stats::terms(x = formula, data = data)
+  
+  mf = stats::model.frame(formula = formula, data = data)
+  r$target.var = names(mf)[1]
+  
+  y = mf[,1]
+  X = stats::model.matrix(formula, data=data)
+  
+  # Convert to a numeric matrix and drop the target variable
+  X = as.matrix(X)
+  X = X[,-1,drop=FALSE]
+  X0 = X
+  
+  I.keep = rep(T, ncol(X))
+  if(standardize)
+  {
+    std.X = my.standardise(X)
+    X = std.X$X
+    
+    I.keep = std.X$std.X!=0
+    X      = std.X$X[,I.keep]
+  }
+  
+  #initialize parameters
+  n = nrow(X)
+  p = ncol(X)
+  theta = rep(1, p)
+  
+  # ------
+  xty = crossprod(X,y)
+  xtx = crossprod(X,X)
+  
+  theta = solve(xtx + diag(1,p),xty)
+  
+  condition = T
+  
+  counter = 0
+  while (condition) 
+  {
+    theta_old = theta
+    
+    u     = (1/(2*pi*sqrt(a))) * ((a/theta^2) - (a/(theta^2 + a)))
+    a     = ((a^(3/2))/(p*pi)) * sum(1/(a + theta^2))
+    
+    u = pmax(u, 1e-10)
+    
+    #d = pmin(a/(2*u),1e10)
+    #d = pmax(a/(2*u),1e-30)
+    d = a/(2*u)
+    
+    #D     = diag(as.vector(a/(2*u)))
+    D     = diag(as.vector(d))
+    X0    = X
+    for (i in 1:p)
+    {
+      X0[,i] = X0[,i]*d[i]
+    }
+    W     = X0 %*% t(X) + diag(n)
+    
+    #W     = X%*%D%*%t(X) + diag(n)
+    
+    L     = chol(W)
+    vv    = forwardsolve(t(L), y)
+    w     = backsolve(L, vv)
+    
+    theta   = D%*%t(X)%*% w
+    
+    d = abs(theta_old - theta)
+    #difference_small = (max(d/abs(theta_old), na.rm = T) < tol)
+    
+    
+    difference_small = (sum(abs(theta_old-theta)) / (1+sum(abs(theta))) < tol) # might end too early
+    # difference_small = difference_small | (sum(abs(a_old-a)) / (1+sum(abs(a))) < (tol^2))
+    
+    #cat(sum(abs(theta_old-theta)) / (1+sum(abs(theta))),",")
+    
+    
+    # update condition
+    if (difference_small && counter > 20)
+    {
+      condition = FALSE
+    }
+    if (counter == 1000)
+    {
+      break
+    }
+    
+    counter=counter+1
+  }
+  
+  # Done
+  r$a = a
+  r$beta0 = mean(y)
+  r$beta = theta
+  r$converge = counter
+  
+  if(standardize)
+  {
+    r$beta  <- r$beta / (std.X$std.X[I.keep])
+    r$beta0 <- r$beta0 - std.X$mean.X[I.keep] %*% r$beta
+    
+    r$std.X = std.X
+  }
+  r$model = "gaussian"
+  r$I.keep = I.keep
+  
+  return(r)
+}
+
+tr <- function(X)
+{
+  sum(diag(X))
+}
+
+linreg.post.glmnet <- function(X, y, lambda2, tau2, sigma2)
+{
+  n = nrow(X)
+  p = ncol(X)
+  
+  s = sum(1/lambda2)
+  bhat = as.matrix(coefficients(glmnet(X,y,"gaussian",
+                                       alpha=0,lambda=s/(p*tau2*n),
+                                       penalty.factor=1/lambda2,
+                                       thresh = 1e-10)))
+  
+  beta.var = 1/(n/sigma2 + 1/(lambda2*tau2*sigma2))
+  
+  E.RSS = sum( (y - X %*% bhat[2:(p+1)] - bhat[1])^2 ) + sum( n*beta.var )
+  
+  return(list(beta.mu = bhat[2:(p+1)], beta0 = bhat[1], beta.v2 = beta.var, E.RSS = E.RSS))
+}
+
+glmreg.post.glmnet <- function(X, y, model, lambda2, tau2)
+{
+  n = nrow(X)
+  p = ncol(X)
+  
+  # Fit
+  s = sum(1/lambda2)
+  bhat = as.matrix(coefficients(glmnet(X,y,model,
+                                       alpha=0,lambda=s/(p*tau2*n),
+                                       penalty.factor=1/lambda2,
+                                       thresh = 1e-10)))
+  b0 = bhat[1]
+  beta = bhat[2:(p+1)]
+  
+  
+  eta = X %*% beta + b0
+  mu = 1/(1+exp(-eta))
+  rv.omega2 = compute.omega2(model,mu,eta,y,T)
+  omega2 = as.vector(rv.omega2$omega2)
+  
+  #X0 = X
+  XtX = rep(0, p)
+  for (i in 1:p)
+  {
+    XtX[i] = sum(X[,i]^2*omega2)
+  }
+  
+  # Approximate variances  
+  beta.var = 1/(XtX + 1/(lambda2*tau2))
+  
+  return(list(beta.mu = bhat, beta.v2 = c(0,beta.var)))
+}
+
