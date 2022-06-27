@@ -68,11 +68,12 @@ C = toeplitz(rho^(0:(p-1)))
 beta = as.vector(beta)
 SNR = sqrt( t(beta)%*%C%*%beta / 1 ) # Calibrate SNR so sigma2 = 1
 
-scores_100_071 = continuous.synthetic.data.test(beta, cov.X=C, SNR, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
+#sigma2 = 1
+scores_071 = continuous.synthetic.data.test(beta, cov.X=C, SNR, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
                                                 log.tau2.max=c(0,0,0,0,0,0,0), e = 1e-5, use.approx = c(F,F,T,F,F,F,F), seed = 1000, 
                                                 use.glmnet = c(F,F,F,F,F,F,F))
-
-scores_100_079 = continuous.synthetic.data.test(beta, cov.X=C, SNR/3, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
+#sigma2 = 9
+scores_079 = continuous.synthetic.data.test(beta, cov.X=C, SNR/3, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
                                                 log.tau2.max=c(0,0,0,0,0,0,0), e = 1e-5, use.approx = c(F,F,T,F,T,F,F), seed = 1000, 
                                                 use.glmnet = c(F,F,F,F,F,F,F))
 
@@ -83,11 +84,12 @@ rho = 0
 C = toeplitz(rho^(0:(p-1)))
 SNR = sqrt( t(beta)%*%C%*%beta / 1 )
 
-scores_100_001 = continuous.synthetic.data.test(beta, cov.X=C, SNR, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
+#sigma2 = 1
+scores_001 = continuous.synthetic.data.test(beta, cov.X=C, SNR, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
                                                 log.tau2.max=c(0,0,0,0,0,0,0), e = 1e-5, use.approx = c(F,F,T,F,F,F,F), seed = 1000, 
                                                 use.glmnet = c(F,F,F,F,F,F,F))
-
-scores_100_009 = continuous.synthetic.data.test(beta, cov.X=C, SNR/3, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
+#sigma2 = 9
+scores_009 = continuous.synthetic.data.test(beta, cov.X=C, SNR/3, 70, 100, c("glmnet","hs.lambda2","hs.lambda2","MCP","SCAD", "hs.like", "glmnet.ridge"), 
                                                 log.tau2.max=c(0,0,0,0,0,0,0), e = 1e-5, use.approx = c(F,F,T,F,F,F,F), seed = 1000, 
                                                 use.glmnet = c(F,F,F,F,F,F,F))
 
