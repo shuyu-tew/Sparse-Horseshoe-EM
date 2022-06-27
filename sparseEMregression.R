@@ -1,576 +1,10 @@
 # ==============================================================================
-# Estimate tau2 & lambda2, depending on prior
-# ==============================================================================
-
-est.tau2.lambda2.sigma2 <- function(prior, model, Eb2, n = NULL, E.RSS = NULL, Enu.inv = NULL, Exi.inv = NULL, log.tau2.max = 20, tau2=1, sigma2=1)
-{
-  # ----------------------------
-  # Gaussian regression
-  if (model == "gaussian")
-  {
-    # Find tau2/lambda2 from Eb2 depending on the prior
-    if (prior == "hs")
-    {
-      rv = find.tau2.sigma2.hs(Eb2,n,E.RSS, log.tau2.max=log.tau2.max,tau2=tau2,sigma2=sigma2)
-      tau2 = rv$tau2
-      sigma2 = rv$sigma2
-      lambda2 = est.lambda2.hs(Eb2, sigma2, tau2)
-    }  
-    else if (prior == "hs.lambda2")
-    {
-      rv = find.tau2.sigma2.hs.lambda2(Eb2,n,E.RSS, log.tau2.max=log.tau2.max,tau2=tau2,sigma2=sigma2)
-      tau2 = rv$tau2
-      sigma2 = rv$sigma2
-      lambda2 = est.lambda2.hs.lambda2(Eb2, sigma2, tau2)      
-    }
-    else if (prior == "lasso")
-    {
-      rv = find.tau2.sigma2.lasso(Eb2,n,E.RSS, log.tau2.max=log.tau2.max,tau2=tau2,sigma2=sigma2)
-      tau2 = rv$tau2
-      sigma2 = rv$sigma2
-      lambda2 = est.lambda2.lasso(Eb2, sigma2, tau2)      
-    }
-    else if (prior == "ridge.tau2")
-    {
-      sigma2 = find.sigma2.ridge.tau2(Eb2,n,E.RSS)
-      tau2 = find.tau2.ridge.tau2(Eb2, sigma2)
-      lambda2 = rep(1,length(Eb2))
-    }
-  }
-  
-  # ----------------------------
-  # GLMs -- no sigma2  
-  else
-  {
-    # Find tau2/lambda2 from Eb2 depending on the prior
-    if (prior == "hs")
-    {
-      tau2 = find.tau2.hs(Eb2, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 <- est.lambda2.hs(Eb2, sigma2=1, tau2)
-    }
-    else if (prior == "hs.lambda2")
-    {
-      tau2 = find.tau2.hs.lambda2(Eb2, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 = est.lambda2.hs.lambda2(Eb2, sigma=1, tau2)
-    }
-    else if (prior == "lasso")
-    {
-      tau2 = find.tau2.lasso(Eb2, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 <- est.lambda2.lasso(Eb2, sigma2=1, tau2)
-    }
-    else if (prior == "lasso.lambda")
-    {
-      tau2 = find.tau2.lasso.lambda(Eb2, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 <- est.lambda2.lasso.lambda(Eb2, sigma2=1, tau2)
-    }      
-    else if (prior == "1.on.lambda2")
-    {
-      tau2 = find.tau2.lasso.1.on.lambda2(Eb2, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 <- est.lambda2.lasso.1.on.lambda2(Eb2, sigma2=1, tau2)
-    }      
-    else if (prior == "hs.igig")
-    {
-      tau2 = find.tau2.hs.igig(Eb2, Enu.inv, Exi.inv, sigma2=1, log.tau2.max=log.tau2.max)
-      lambda2 = est.lambda2.hs.igig(Eb2, Enu.inv, sigma2=1, tau2)
-    }
-    else if (prior == "ridge")
-    {
-      tau2 = find.tau2.ridge.tau(Eb2, sigma2=1)
-      lambda2 = rep(1,length(Eb2))
-    }
-    else if (prior == "ridge.tau2")
-    {
-      tau2 = find.tau2.ridge.tau2(Eb2, sigma2=1)
-      lambda2 = rep(1,length(Eb2))
-    }
-    
-    sigma2 = NULL
-  }
-  
-  lambda2 = pmax(lambda2, 1e-20)
-  
-  return(list(lambda2=lambda2,tau2=tau2,sigma2=sigma2))
-}
-
-# ------------------------------------------------------------------------------
-# Horseshoe (lambda)
-tau2.f.hs <- function(log.tau2, Eb2, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.hs(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + log(1+tau2) + sum(log(1+lambda2))
-  f
-}
-
-tau2.sigma2.f.hs <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = exp(x[2])
-  lambda2 = est.lambda2.hs(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + log(1+tau2) + sum(log(1+lambda2))
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2
-  f
-}
-
-tau2.sigma2.f.hs.2 <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = Erss/n
-  lambda2 = est.lambda2.hs(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + log(1+tau2) + sum(log(1+lambda2))
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2 + log(sigma2)
-  f
-}
-
-est.lambda2.hs <- function(Eb2,sigma2,tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  
-  pmax((sqrt(-1 + 2*W + sqrt(1 + 20*W + 4*W^2))/sqrt(6))^2, 1e-10)
-}
-
-find.tau2.hs <- function(Eb2,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.hs(log.tau2,Eb2,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-#find.tau2.sigma2.hs <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-#{
-#  min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.hs(x, Eb2, n, E.RSS) },
-#lower = c(-10,-10), upper = c(log.tau2.max,10), method="L-BFGS-B"))$par)
-#min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.hs(x, Eb2, n, E.RSS) }))$par)
-
-#  tau2 = min.par[1]
-#  sigma2 = min.par[2]
-
-#  return(list(tau2=tau2,sigma2=sigma2))
-#}
-
-find.tau2.sigma2.hs <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-{
-  #min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.hs(x, Eb2, n, E.RSS) },
-  #lower = c(-10,-10), upper = c(log.tau2.max,10), method="L-BFGS-B"))$par)
-  #min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.hs(x, Eb2, n, E.RSS) }))$par)
-  
-  #tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f.hs.2(log.tau2,Eb2, n, Erss)}, c(-10,log.tau2.max)))$minimum)
-  
-  #tau2 = min.par[1]
-  p = length(Eb2)
-  
-  tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f.hs.2(log.tau2,Eb2,n,E.RSS)}, c(-10,log.tau2.max)))$minimum)
-  #sigma2 = E.RSS/n
-  #lambda2 = est.lambda2.hs.lambda2(Eb2,sigma2,tau2)
-  #sigma2 = (E.RSS + sum(Eb2/lambda2/tau2))/(n+p)
-  #sigma2 = (E.RSS + sum(Eb2/lambda2/tau2))/(n+p)
-  sigma2 = E.RSS/n
-  
-  return(list(tau2=tau2,sigma2=sigma2))  
-}
-
-
-# ------------------------------------------------------------------------------
-# Horseshoe (lambda2)
-tau2.f.hs.lambda2 <- function(log.tau2, Eb2, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.hs.lambda2(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum( (1/2)*log(lambda2) + log(lambda2+1) )
-  f = f + (1/2)*log(tau2) + log(1+tau2)
-  f
-}
-
-tau2.sigma2.f.hs.lambda2 <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = exp(x[2])
-  lambda2 = est.lambda2.hs.lambda2(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum( (1/2)*log(lambda2) + log(lambda2+1) )
-  f = f + (1/2)*log(tau2) + log(1+tau2)
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2
-  f
-}
-
-tau2.sigma2.f.hs.lambda2.2 <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = Erss/n
-  lambda2 = est.lambda2.hs.lambda2(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum( (1/2)*log(lambda2) + log(lambda2+1) )
-  f = f + (1/2)*log(tau2) + log(1+tau2)
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2 + log(sigma2)
-  if (is.nan(f))
-  {
-    f
-  }
-  f
-}
-
-est.lambda2.hs.lambda2 <- function(Eb2,sigma2,tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  
-  pmax( (sqrt(W^2 + 6*W + 1) + W - 1) / 4, 1e-50  )
-}
-
-find.tau2.hs.lambda2 <- function(Eb2,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.hs.lambda2(log.tau2,Eb2,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-# find.tau2.sigma2.hs.lambda2 <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-# {
-#  min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.hs.lambda2(x, Eb2, n, E.RSS) },
-#                        lower = c(-10,-10), upper = c(log.tau2.max,10), method="L-BFGS-B"))$par)
-#  #min.par = exp((optim( (c(0,0)), function(x){ tau2.sigma2.f.hs.lambda2(x, Eb2, n, E.RSS) }                       ))$par)
-# 
-#  tau2 = min.par[1]
-#  sigma2 = min.par[2]
-# 
-#  return(list(tau2=tau2,sigma2=sigma2))
-# }
-
-find.tau2.sigma2.hs.lambda2 <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f.hs.lambda2.2(log.tau2,Eb2, n, E.RSS)}, c(-10,log.tau2.max)))$minimum)
-  #sigma2 = (E.RSS+p)/(n+p)
-  sigma2 = E.RSS/n
-  #lambda2 = est.lambda2.hs.lambda2(Eb2,sigma2,tau2)
-  #sigma2 = (E.RSS + sum(Eb2/lambda2/tau2))/(n+p)
-  
-  return(list(tau2=tau2,sigma2=sigma2))
-}
-
-# ------------------------------------------------------------------------------
-# Horseshoe (IGIG)
-tau2.f.hs.igig <- function(log.tau2, Eb2, Enu.inv, Exi.inv, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.hs.igig(Eb2,Enu.inv,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(3/2*log(lambda2) + Enu.inv/lambda2) + 3/2*log(tau2) + Exi.inv/tau2
-  if (is.infinite(f) || is.na(f))
-  {
-    f
-  }
-  f
-}
-
-est.lambda2.hs.igig <- function(Eb2, Enu.inv, sigma2, tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  pmax( (W + Enu.inv)/2, 1e-50 )
-}
-
-find.tau2.hs.igig <- function(Eb2,Enu.inv,Exi.inv,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.hs.igig(log.tau2,Eb2,Enu.inv,Exi.inv,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-# ------------------------------------------------------------------------------
-# Lasso (lambda2)
-tau2.f.lasso <- function(log.tau2, Eb2, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.lasso(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(lambda2/2) 
-  f = f + 2*log(tau2) + 1/tau2
-  #f = f + log(1+tau2) + (1/2)*log(tau2)
-  f
-}
-
-tau2.sigma2.f.lasso <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = exp(x[2])
-  lambda2 = est.lambda2.lasso(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(lambda2/2) + 2*log(tau2) + 1/tau2
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2
-  f
-}
-
-tau2.sigma2.f.lasso.2 <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  sigma2 = Erss/n
-  lambda2 = est.lambda2.lasso(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(lambda2/2) + 2*log(tau2) + 1/tau2
-  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2
-  f
-}
-
-tau2.sigma2.f.lasso.3 <- function(x, Eb2, n, Erss)
-{
-  p = length(Eb2)
-  tau2 = exp(x[1])
-  lambda2 = est.lambda2.lasso(Eb2,sigma2=1,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(lambda2/2) + 2*log(tau2) + 1/tau2
-  f
-}
-
-est.lambda2.lasso <- function(Eb2, sigma2, tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  pmax((sqrt(1 + 8*W)-1)/2, 1e-50)
-}
-
-find.tau2.lasso <- function(Eb2,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.lasso(log.tau2,Eb2,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-#find.tau2.sigma2.lasso <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-#{
-#  min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.lasso(x, Eb2, n, E.RSS) },
-#                        lower = c(-10,-10), upper = c(log.tau2.max,10), method="L-BFGS-B"))$par)
-#  tau2 = min.par[1]
-#  sigma2 = min.par[2]
-#  
-#  return(list(tau2=tau2,sigma2=sigma2))
-#}
-
-find.tau2.sigma2.lasso <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1)
-{
-  #min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f.lasso(x, Eb2, n, E.RSS) },
-  #                    lower = c(-10,-10), upper = c(log.tau2.max,10), method="L-BFGS-B"))$par)
-  
-  
-  #tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f.lasso.3(log.tau2,Eb2, n, E.RSS)}, c(-10,log.tau2.max)))$minimum)
-  tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f.lasso.2(log.tau2,Eb2, n, E.RSS)}, c(-10,log.tau2.max)))$minimum)
-  
-  #tau2 = min.par[1]
-  sigma2 = E.RSS/n
-  
-  return(list(tau2=tau2,sigma2=sigma2))
-}
-
-
-# ------------------------------------------------------------------------------
-# Lasso (lambda)
-tau2.f.lasso.lambda <- function(log.tau2, Eb2, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.lasso.lambda(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(lambda2/2) - sum(log(lambda2)/2) + 2*log(tau2) + 1/tau2
-  if (is.infinite(f) || is.na(f))
-  {
-    f
-  }
-  f
-}
-
-est.lambda2.lasso.lambda <- function(Eb2, sigma2, tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  pmax(sqrt(2)*sqrt(W), 1e-50)
-}
-
-find.tau2.lasso.lambda <- function(Eb2,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.lasso.lambda(log.tau2,Eb2,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-
-# ------------------------------------------------------------------------------
-# Lasso (1.on.lambda)
-tau2.f.lasso.1.on.lambda2 <- function(log.tau2, Eb2, sigma2=1)
-{
-  p = length(Eb2)
-  tau2 = exp(log.tau2)
-  lambda2 = est.lambda2.lasso.1.on.lambda2(Eb2,sigma2,tau2)
-  
-  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) 
-  f = f + sum(2*log(1/lambda2) + 1/2/(1/lambda2) ) + 2*log(tau2) + 1/tau2
-  if (is.infinite(f) || is.na(f))
-  {
-    f
-  }
-  f
-}
-
-est.lambda2.lasso.1.on.lambda2 <- function(Eb2, sigma2, tau2)
-{
-  W = Eb2/2/sigma2/tau2
-  pmax( 1/( (sqrt(8*W+9)-3)/(4*W) ), 1e-20 )
-}
-
-find.tau2.lasso.1.on.lambda2 <- function(Eb2,sigma2,log.tau2.max=20)
-{
-  exp((optimise(function(log.tau2){tau2.f.lasso.1.on.lambda2(log.tau2,Eb2,sigma2)}, c(-10,log.tau2.max)))$minimum)
-}
-
-# ------------------------------------------------------------------------------
-# Ridge (tau)
-find.tau2.ridge.tau <- function(Eb2,sigma2)
-{
-  p = length(Eb2)
-  W = sum(Eb2/sigma2/2)
-  
-  (sqrt(4*W^2+4*p*W+16*W+p^2)/(p+2)+(2*W)/(p+2)-p/(p+2))/2
-}
-
-# ------------------------------------------------------------------------------
-# Ridge (tau2)
-find.tau2.ridge.tau2 <- function(Eb2,sigma2)
-{
-  p = length(Eb2)
-  W = sum(Eb2/sigma2/2)
-  
-  (sqrt(4*W^2+(4*p+20)*W+p^2+2*p+1)+2*W-p-1)/(2*p+6)
-}
-
-
-sigma2.f.ridge.tau2 <- function(log.sigma2, Eb2, n, E.RSS)
-{
-  p = length(Eb2)
-  sigma2 = exp(log.sigma2)
-  tau2 = find.tau2.ridge.tau2(Eb2,sigma2)
-  
-  f = p/2*log(tau2) + 1/2/sigma2/tau2*sum(Eb2)
-  f = f + (1/2)*log(tau2) + log(1+tau2)
-  f = f + (n+p)/2*log(sigma2) + E.RSS/2/sigma2
-  f
-}
-
-find.sigma2.ridge.tau2 <- function(Eb2,n,E.RSS)
-{
-  exp((optimise(function(log.sigma2){sigma2.f.ridge.tau2(log.sigma2,Eb2,n,E.RSS)}, c(-10,20)))$minimum)
-}
-
-
-# coord.wise.opt <- function(Eb2,sigma2,max.iter=1000)
-# {
-#   tau2 = 1
-#   for (i in 1:max.iter)
-#   {
-#     lambda2 = est.lambda2(Eb2,sigma2,tau2)
-#     tau2 = est.tau2(Eb2,lambda2,sigma2)
-#     print(log(tau2))
-#   }
-#   list(lambda2=lambda2,tau2=tau2)
-# }
-
-
-# ==============================================================================
-# Multiple means ...
-# ==============================================================================
-#
-
-mu.est <- function(y, sigma2, tau2)
-{
-  # Initialise
-  Eb2 = y^2 + sigma2
-  
-  # EM
-  done = F
-  i = 1;
-  while (!done)
-  {
-    # M-step
-    #tau2 <- find.tau2(Eb2, sigma2)
-    lambda2 <- est.lambda2.hs(Eb2, sigma2, tau2)
-    lambda2 = pmax(lambda2, 1e-6)
-    
-    # E-step
-    kappa = 1/(1+tau2*lambda2)
-    beta.hat = y*(1-kappa)
-    
-    Eb2 = beta.hat^2 + (1-kappa)^2*sigma2
-    
-    # Termination conditions
-    i = i+1
-    if (i == 3000)
-    {
-      break
-    }
-  }
-  
-  beta.hat[abs(beta.hat)<1e-4] = 0
-  
-  return(list(beta=beta.hat,lambda2=lambda2,tau2=tau2))
-}
-
-
-mu.est.kappa <- function(y, sigma2, tau2)
-{
-  # Initialise
-  Eb2 = y^2 + sigma2
-  #Eb2 = 0
-  
-  Eb2 = 0.5
-  
-  # EM
-  done = F
-  i = 1;
-  while (!done)
-  {
-    # M-step
-    #tau2 <- find.tau2(Eb2, sigma2)
-    #lambda2 <- est.lambda2(Eb2, sigma2, tau2)
-    #lambda2 = pmax(lambda2, 1e-6)
-    k = pmax(1 - Eb2, 1e-10)
-    lambda2 = sqrt((1-k)/k)
-    
-    # E-step
-    kappa = 1/(1+tau2*lambda2)
-    beta.hat = y*(1-kappa)
-    
-    Eb2 = beta.hat^2 + (1-kappa)^2*sigma2
-    
-    # Termination conditions
-    i = i+1
-    if (i == 3000)
-    {
-      break
-    }
-  }
-  
-  beta.hat[abs(beta.hat)<1e-4] = 0
-  
-  return(list(beta=beta.hat,lambda2=lambda2,tau2=tau2))
-}
-
-# ==============================================================================
 # EM algorithm
 # ==============================================================================
 
 beta.EM <- function(formula, data, model, prior = "hs", approx = F, e = 1e-6, 
-                    stochastic = F, PG = F, rv.br = NULL, log.tau2.max=15, start.values = NULL, 
-                    use.glmnet = F, Eb2.start = NULL)
+                       stochastic = F, PG = F, rv.br = NULL, log.tau2.max=15, start.values = NULL, 
+                       use.glmnet = F, Eb2.start = NULL)
 {
   rv = list()
   
@@ -620,8 +54,8 @@ beta.EM <- function(formula, data, model, prior = "hs", approx = F, e = 1e-6,
   if (model == "gaussian")
   {
     rv.em = beta.est(X, y, prior, approx = approx, 
-                     e = e, stochastic = stochastic, log.tau2.max = log.tau2.max,
-                     use.glmnet = use.glmnet, start.values = start.values)
+                        e = e, stochastic = stochastic, log.tau2.max = log.tau2.max,
+                        use.glmnet = use.glmnet, start.values = start.values)
   }
   else
   {
@@ -654,7 +88,7 @@ beta.EM <- function(formula, data, model, prior = "hs", approx = F, e = 1e-6,
 # ==============================================================================
 #
 beta.est <- function(X, y, prior, approx = F, use.glmnet = F, e = 1e-6, stochastic = F, 
-                     start.values = NULL, log.tau2.max = 20)
+                        start.values = NULL, log.tau2.max = 20)
 {
   p = ncol(X)
   n = nrow(X)
@@ -793,6 +227,95 @@ beta.est <- function(X, y, prior, approx = F, use.glmnet = F, e = 1e-6, stochast
               L = L
   ))
 }
+
+
+
+
+# ==============================================================================
+# Estimate tau2 & lambda2, depending on prior
+# ==============================================================================
+
+est.tau2.lambda2.sigma2 <- function(prior, model, Eb2, n = NULL, E.RSS = NULL, Enu.inv = NULL, Exi.inv = NULL, log.tau2.max = 20, tau2=1, sigma2=1)
+{
+  # ----------------------------
+  # Gaussian regression
+  if (model == "gaussian")
+  {
+    # Find tau2/lambda2 from Eb2 depending on the prior
+    rv = find.tau2.sigma2(Eb2,n,E.RSS, log.tau2.max=log.tau2.max,tau2=tau2,sigma2=sigma2, prior = prior)
+    tau2 = rv$tau2
+    sigma2 = rv$sigma2
+    lambda2 = est.lambda2(Eb2, sigma2, tau2, prior)
+  }
+  
+  # ----------------------------
+  # GLMs -- no sigma2  
+  else
+  {
+    
+    tau2 = find.tau2(Eb2, sigma2=1, log.tau2.max=log.tau2.max, prior = prior)
+    lambda2 = est.lambda2(Eb2, sigma2=1, tau2, prior = prior)
+    
+    sigma2 = NULL
+  }
+  
+  return(list(lambda2=lambda2,tau2=tau2,sigma2=sigma2))
+}
+
+
+find.tau2.sigma2 <- function(Eb2,n,E.RSS,log.tau2.max=20,tau2=1,sigma2=1, prior)
+{
+  p = length(Eb2)
+  
+  tau2 = exp((optimise(function(log.tau2){tau2.sigma2.f(log.tau2,Eb2,n,E.RSS,prior)}, c(-10,log.tau2.max)))$minimum)
+  sigma2 = E.RSS/n
+  
+  return(list(tau2=tau2,sigma2=sigma2))  
+}
+
+
+
+tau2.sigma2.f <- function(x, Eb2, n, Erss, prior)
+{
+  p = length(Eb2)
+  tau2 = exp(x)
+  sigma2 = Erss/n
+  lambda2 = est.lambda2(Eb2,sigma2,tau2,prior)
+  
+  f = p/2*log(tau2) + 1/2*sum(log(lambda2)) + 1/2/sigma2/tau2*sum(Eb2/lambda2) # beta 
+  f = f + (n+p)/2*log(sigma2) + Erss/2/sigma2 + log(sigma2) # data model
+  
+  if(prior == "hs"){
+    f = f + log(1+tau2) + sum(log(1+lambda2))
+  }else if (prior == "hs.lambda2"){
+    f = f + sum( (1/2)*log(lambda2) + log(lambda2+1) )
+    f = f + (1/2)*log(tau2) + log(1+tau2)
+  }else if (prior == "lasso"){
+    f = f + sum(lambda2/2) + 2*log(tau2) + 1/tau2
+  }else if (prior == "lasso.lambda"){
+    f = f + sum(lambda2/2) - sum(log(lambda2)/2) + 2*log(tau2) + 1/tau2
+  }
+  
+  f
+}
+
+est.lambda2 <- function(Eb2,sigma2,tau2,prior)
+{
+  W = Eb2/2/sigma2/tau2
+  
+  if(prior == "hs"){
+    lambda2 = (sqrt(-1 + 2*W + sqrt(1 + 20*W + 4*W^2))/sqrt(6))^2
+  }else if (prior == "hs.lambda2"){
+    lambda2 = (sqrt(W^2 + 6*W + 1) + W - 1) / 4
+  }else if (prior == "lasso"){
+    lambda2 = (sqrt(1 + 8*W)-1)/2
+  }else if (prior == "lasso.lambda"){
+    lambda2 = sqrt(2)*sqrt(W)
+  }
+  
+  return(pmax(lambda2,1e-50))
+}
+
 
 # ==============================================================================
 # Estimate the beta's in a GLM
@@ -1007,16 +530,6 @@ compute.omega2 <- function(model, mu, eta, y, PG)
   return(list(omega2=omega2,z=z))
 }
 
-update.Eb2.E.RSS <- function(Eb2, E.RSS, b, X, y, i, chi)
-{
-  alpha = (i/(i+1))^chi
-  
-  Eb2 = alpha*Eb2 + (1-alpha)*b^2
-  E.RSS = alpha*E.RSS + (1-alpha)*(sum((y - X %*% b - mean(y))^2))
-  
-  return(list(Eb2=Eb2, E.RSS=E.RSS))
-}
-
 # ============================================================================================================================
 # Linear regression conditional posterior statistics
 linreg.post <- function(XtX, Xty, X, y, d, sigma2, approx = F, sample = F, return.E.RSS = T, bhat = F)
@@ -1124,11 +637,6 @@ linreg.post <- function(XtX, Xty, X, y, d, sigma2, approx = F, sample = F, retur
     }
   }
   
-  #cat("E.RSS: ")
-  #cat(E.RSS,"\n")
-  #cat("bv2: ")
-  #cat(beta.var,"\n")  
-  
   return(list(beta.mu = beta.mu, beta.v2 = beta.var, E.RSS = E.RSS, b = b))
 }
 
@@ -1155,6 +663,7 @@ linreg.w2.post <- function(X, y, w2, d, approx = F, sample = F)
   # 
   linreg.post(XtX, Xty, X0, y, d, sigma2 = 1, approx = approx, sample = sample, return.E.RSS = F)
 }
+
 
 # ============================================================================================================================
 # Simple GLM ridge fit
@@ -1235,6 +744,7 @@ glm.fit <- function(X, y, d, model)
   return(list(beta.mu=beta, beta.v2=rv$beta.v2, i = i))
 }
 
+
 # ============================================================================================================================
 # function to standardise columns of X to have mean zero and unit length
 my.standardise <- function(X)
@@ -1269,92 +779,6 @@ my.standardise <- function(X)
 }
 
 # ============================================================================================================================
-# Find starting point
-find.start <- function(rv, y, X)
-{
-  n.samples = ncol(rv.br$beta)
-  p = nrow(rv.br$beta)
-  n = length(y)
-  
-  alpha = 0.9
-  
-  Eb2 = matrix(rv$beta[,1]^2, p, 1)
-  E.RSS = sum( (y - X%*%rv$beta[,1] - rv$beta0[1])^2 )
-  
-  Eb2.store = matrix(0,p,n.samples)
-  E.RSS.store = matrix(0,1,n.samples)
-  
-  tau2 = rv$tau2[1]
-  sigma2 = rv$sigma2[1]
-  
-  L = matrix(0,n.samples,1)
-  
-  for (i in 2:n.samples)
-  {
-    Eb2 = Eb2*alpha + rv.br$beta[,i]^2*(1-alpha)
-    E.RSS = E.RSS*alpha + sum( (y - X%*%rv$beta[,i] - rv$beta0[i])^2 )*(1-alpha)
-    
-    Eb2.store[,i] = Eb2
-    E.RSS.store[i] = E.RSS
-    
-    #tau2 = tau2*alpha + rv$tau2[i]*(1-alpha)
-    #sigma2 = sigma2*alpha + rv$sigma2[i]*(1-alpha)
-    
-    min.par = exp((optim( log(c(tau2,sigma2)), function(x){ tau2.sigma2.f(x, Eb2, n, E.RSS) } ))$par)
-    tau2 = min.par[1]
-    sigma2 = min.par[2]
-    lambda2 <- est.lambda2(Eb2, sigma2, tau2)
-    
-    # Neg-log-posterior
-    L[i] = E.neg.log.posterior(Eb2, E.RSS, lambda2, tau2, sigma2, n, p)
-  }
-  
-  return(list(Eb2 = Eb2.store[,100:n.samples], E.RSS = E.RSS.store[100:n.samples], L = L[100:n.samples]))
-}
-
-# ============================================================================================================================
-# Find starting point
-find.start.glm <- function(rv, X, y)
-{
-  n.samples = ncol(rv.br$beta)
-  p = nrow(rv.br$beta)
-  n = length(y)
-  
-  alpha = 0
-  
-  # Starting point
-  Eb2 = matrix(rv$beta[,1]^2, p, 1)
-  E.NLL = neg.log.likelihood(X,y,rv$beta[,1],rv$beta0[1],rv$model)
-  
-  Eb2.store = matrix(0,p,n.samples)
-  E.NLL.store = matrix(0,1,n.samples)
-  
-  tau2 = rv$tau2[1]
-  sigma2 = rv$sigma2[1]
-  
-  L = matrix(0,n.samples,1)
-  for (i in 2:n.samples)
-  {
-    Eb2 = Eb2*alpha + rv.br$beta[,i]^2*(1-alpha)
-    E.NLL = E.NLL*alpha + (1-alpha)*neg.log.likelihood(X,y,rv$beta[,i],rv$beta0[i],rv$model)
-    
-    Eb2.store[,i] = Eb2
-    E.NLL.store[i] = E.NLL
-    
-    #tau2 = tau2*alpha + rv$tau2[i]*(1-alpha)
-    #sigma2 = sigma2*alpha + rv$sigma2[i]*(1-alpha)
-    
-    tau2 = find.tau2(Eb2,sigma2=1)
-    lambda2 <- est.lambda2(Eb2, sigma2=1, tau2)
-    
-    # Neg-log-posterior
-    L[i] = E.neg.log.posterior.glm(E.NLL, Eb2, lambda2, tau2)
-  }
-  
-  return(list(Eb2 = Eb2.store[,100:n.samples], E.NLL = E.NLL.store[100:n.samples], L = L[100:n.samples]))
-}
-
-# ============================================================================================================================
 # Expected negative log-posterior for linear regression model
 E.neg.log.posterior <- function(Eb2, E.RSS, lambda2, tau2, sigma2, n, p)
 {
@@ -1363,347 +787,4 @@ E.neg.log.posterior <- function(Eb2, E.RSS, lambda2, tau2, sigma2, n, p)
   L + sum(log(1 + lambda2)) + log(1+tau2)
 }
 
-# ============================================================================================================================
-# Expected negative log-posterior for GLM
-E.neg.log.posterior.glm <- function(L, Eb2, lambda2, tau2)
-{
-  p = length(Eb2)
-  
-  #
-  L = L + p/2*log(tau2) + (1/2)*sum(log(lambda2)) + 1/tau2*sum(Eb2/lambda2)
-  L + sum(log(1 + lambda2)) + log(1+tau2)
-}
 
-# ============================================================================================================================
-# Negative log-likelihood
-neg.log.likelihood <- function(X, y, beta, beta0, model, sigma2 = NULL)
-{
-  n = nrow(X)
-  eta = X %*% beta + beta0
-  
-  if (model == "gaussian")
-  {
-    L = (n/2)*log(sigma2) + (y-eta)^2/2/sigma2
-  }
-  else if (model == "binomial")
-  {
-    mu = 1/(1+exp(-eta))
-    L = -sum(log(mu[y==1])) - sum(log(1-mu[y==0]))
-  }
-  else if (model == "poisson")
-  {
-    mu = exp(eta)
-    L = sum( -y*eta + mu + lgamma(y+1) )
-  }
-  L
-}
-
-em.predict <- function(object, newdata)
-{
-  # Build the fully specified formula using the covariates that were fitted
-  f <- stats::as.formula(paste("~",paste(attr(object$terms,"term.labels"),collapse="+")))
-  
-  # Extract the design matrix
-  X = stats::model.matrix(f, data=newdata)
-  X = as.matrix(X[,-1])
-  X = X[,object$I.keep]
-  n = nrow(X)
-  p = ncol(X)
-  
-  # Make predictions
-  yp = X %*% object$beta + as.numeric(object$beta0)
-  
-  # If GLM
-  if (object$model == "binomial")
-  {
-    yp = 1/(1+exp(-yp))
-  }
-  else if (object$model == "poisson")
-  {
-    yp = exp(yp)
-  }
-  
-  yp
-}
-
-# ==============================================================================
-# Horseshoe-like 
-# ==============================================================================
-
-HS.like.EM <- function(formula, data, n.iter = 1000, standardize = T, a = 1e5, tol = 1e-4)
-{
-  r = list()
-  
-  # -------------------------------------------------------------------    
-  # Process and set up the data from the model formula
-  r$terms <- stats::terms(x = formula, data = data)
-  
-  mf = stats::model.frame(formula = formula, data = data)
-  r$target.var = names(mf)[1]
-  
-  y = mf[,1]
-  X = stats::model.matrix(formula, data=data)
-  
-  # Convert to a numeric matrix and drop the target variable
-  X = as.matrix(X)
-  X = X[,-1,drop=FALSE]
-  X0 = X
-  
-  I.keep = rep(T, ncol(X))
-  if(standardize)
-  {
-    std.X = my.standardise(X)
-    X = std.X$X
-    
-    I.keep = std.X$std.X!=0
-    X      = std.X$X[,I.keep]
-  }
-  
-  #initialize parameters
-  n = nrow(X)
-  p = ncol(X)
-  theta = rep(1, p)
-  
-  # ------
-  xty = crossprod(X,y)
-  xtx = crossprod(X,X)
-  
-  theta = solve(xtx + diag(1,p),xty)
-  
-  condition = T
-  
-  counter = 0
-  while (condition) 
-  {
-    theta_old = theta
-    
-    u     = (1/(2*pi*sqrt(a))) * ((a/theta^2) - (a/(theta^2 + a)))
-    a     = ((a^(3/2))/(p*pi)) * sum(1/(a + theta^2))
-    
-    u = pmax(u, 1e-10)
-    
-    #d = pmin(a/(2*u),1e10)
-    #d = pmax(a/(2*u),1e-30)
-    d = a/(2*u)
-    
-    #D     = diag(as.vector(a/(2*u)))
-    D     = diag(as.vector(d))
-    X0    = X
-    for (i in 1:p)
-    {
-      X0[,i] = X0[,i]*d[i]
-    }
-    W     = X0 %*% t(X) + diag(n)
-    
-    #W     = X%*%D%*%t(X) + diag(n)
-    
-    L     = chol(W)
-    vv    = forwardsolve(t(L), y)
-    w     = backsolve(L, vv)
-    
-    theta   = D%*%t(X)%*% w
-    
-    d = abs(theta_old - theta)
-    #difference_small = (max(d/abs(theta_old), na.rm = T) < tol)
-    
-    
-    difference_small = (sum(abs(theta_old-theta)) / (1+sum(abs(theta))) < tol) # might end too early
-    # difference_small = difference_small | (sum(abs(a_old-a)) / (1+sum(abs(a))) < (tol^2))
-    
-    #cat(sum(abs(theta_old-theta)) / (1+sum(abs(theta))),",")
-    
-    
-    # update condition
-    if (difference_small && counter > 20)
-    {
-      condition = FALSE
-    }
-    if (counter == 1000)
-    {
-      break
-    }
-    
-    counter=counter+1
-  }
-  
-  # Done
-  r$a = a
-  r$beta0 = mean(y)
-  r$beta = theta
-  r$converge = counter
-  
-  if(standardize)
-  {
-    r$beta  <- r$beta / (std.X$std.X[I.keep])
-    r$beta0 <- r$beta0 - std.X$mean.X[I.keep] %*% r$beta
-    
-    r$std.X = std.X
-  }
-  r$model = "gaussian"
-  r$I.keep = I.keep
-  
-  return(r)
-}
-
-
-
-# ==============================================================================
-# Horseshoe-like 
-# ==============================================================================
-
-HS.like.EM.2 <- function(formula, data, n.iter = 1000, standardize = T, a = 1e5, tol = 1e-5)
-{
-  r = list()
-  
-  # -------------------------------------------------------------------    
-  # Process and set up the data from the model formula
-  r$terms <- stats::terms(x = formula, data = data)
-  
-  mf = stats::model.frame(formula = formula, data = data)
-  r$target.var = names(mf)[1]
-  
-  y = mf[,1]
-  X = stats::model.matrix(formula, data=data)
-  
-  # Convert to a numeric matrix and drop the target variable
-  X = as.matrix(X)
-  X = X[,-1,drop=FALSE]
-  X0 = X
-  
-  if(standardize)
-  {
-    std.X = my.standardise(X)
-    X = std.X$X
-  }
-  
-  #initialize parameters
-  n = nrow(X)
-  p = ncol(X)
-  theta = rep(1, p)
-  
-  # ------
-  xty = crossprod(X,y)
-  xtx = crossprod(X,X)
-  
-  condition = T
-  
-  counter = 0
-  while (condition) 
-  {
-    theta_old = theta
-    
-    u     = (1/(2*pi*sqrt(a))) * ((a/theta^2) - (a/(theta^2 + a)))
-    a     = pmax( ((a^(3/2))/(p*pi)) * sum(1/(a + theta^2)), 1e-20)
-    
-    #d = pmin(a/(2*u),1e10)
-    
-    d = pmax(2*u/a, 1e-5)
-    d = pmin(d, 1e10)
-    
-    theta = solve(xtx+diag(as.vector(d)),xty)
-    
-    #D     = diag(as.vector(a/(2*u)))
-    #D     = diag(as.vector(d))
-    #W     = X%*%D%*%t(X) + diag(n)
-    
-    #L     = chol(W)
-    #vv    = forwardsolve(t(L), y)
-    #w     = backsolve(L, vv)
-    
-    #theta   = D%*%t(X)%*% w
-    
-    d = abs(theta_old - theta)
-    difference_small = (max(d/abs(theta_old), na.rm = T) < tol)
-    
-    
-    difference_small = (sum(abs(theta_old-theta)) / (1+sum(abs(theta))) < tol) # might end too early
-    #difference_small = difference_small | (sum(abs(a_old-a)) / (1+sum(abs(a))) < (tol^2))
-    
-    #cat(sum(abs(theta_old-theta)) / (1+sum(abs(theta))),",")
-    
-    
-    # update condition
-    if (counter == 500 || difference_small)
-    {
-      condition = FALSE
-    }
-    
-    counter=counter+1
-  }
-  
-  t = 1/sqrt(n)/5
-  theta[abs(theta)<t] = 0
-  
-  # Done
-  r$a = a
-  r$beta0 = mean(y)
-  r$beta = theta
-  r$converge = counter
-  
-  if(standardize)
-  {
-    r$beta  <- r$beta / t(std.X$std.X)
-    r$beta0 <- r$beta0 - std.X$mean.X %*% r$beta
-    
-    r$std.X = std.X
-  }
-  r$model = "gaussian"
-  
-  return(r)
-}
-
-tr <- function(X)
-{
-  sum(diag(X))
-}
-
-linreg.post.glmnet <- function(X, y, lambda2, tau2, sigma2)
-{
-  n = nrow(X)
-  p = ncol(X)
-  
-  s = sum(1/lambda2)
-  bhat = as.matrix(coefficients(glmnet(X,y,"gaussian",
-                                       alpha=0,lambda=s/(p*tau2*n),
-                                       penalty.factor=1/lambda2,
-                                       thresh = 1e-10)))
-  
-  beta.var = 1/(n/sigma2 + 1/(lambda2*tau2*sigma2))
-  
-  E.RSS = sum( (y - X %*% bhat[2:(p+1)] - bhat[1])^2 ) + sum( n*beta.var )
-  
-  return(list(beta.mu = bhat[2:(p+1)], beta0 = bhat[1], beta.v2 = beta.var, E.RSS = E.RSS))
-}
-
-glmreg.post.glmnet <- function(X, y, model, lambda2, tau2)
-{
-  n = nrow(X)
-  p = ncol(X)
-  
-  # Fit
-  s = sum(1/lambda2)
-  bhat = as.matrix(coefficients(glmnet(X,y,model,
-                                       alpha=0,lambda=s/(p*tau2*n),
-                                       penalty.factor=1/lambda2,
-                                       thresh = 1e-10)))
-  b0 = bhat[1]
-  beta = bhat[2:(p+1)]
-  
-  
-  eta = X %*% beta + b0
-  mu = 1/(1+exp(-eta))
-  rv.omega2 = compute.omega2(model,mu,eta,y,T)
-  omega2 = as.vector(rv.omega2$omega2)
-  
-  #X0 = X
-  XtX = rep(0, p)
-  for (i in 1:p)
-  {
-    XtX[i] = sum(X[,i]^2*omega2)
-  }
-  
-  # Approximate variances  
-  beta.var = 1/(XtX + 1/(lambda2*tau2))
-  
-  return(list(beta.mu = bhat, beta.v2 = c(0,beta.var)))
-}
