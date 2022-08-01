@@ -5,3 +5,9 @@ approach is that the M-step depends only on the form of the prior and it is inde
 The paper is available at <insert paper link>. 
 
 
+## Contact Us
+[Shu](mailto:admin@cloudhadoop.com)
+
+[Daniel Schmidt](mailto:admin@cloudhadoop.com) 
+
+[Enes Makalic](mailto:admin@cloudhadoop.com) 
