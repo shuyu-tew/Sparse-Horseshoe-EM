@@ -6,8 +6,8 @@ The paper is available at <insert paper link>.
 
 
 ## Contact Us
-[Shu](mailto:admin@cloudhadoop.com)
+[Shu Yu Tew](mailto:shu.tew@monash.edu)
 
-[Daniel Schmidt](mailto:admin@cloudhadoop.com) 
+[Daniel Schmidt](mailto:daniel.schmidt@monash.edu) 
 
 [Enes Makalic](mailto:admin@cloudhadoop.com) 
