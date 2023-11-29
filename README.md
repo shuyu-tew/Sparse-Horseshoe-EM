@@ -1,4 +1,4 @@
-# <p align="center"> Sparse Horseshoe Estimation via Expectation-Maximisation </p>
+# <p align="center"> Sparse Horseshoe Estimation via <br/> Expectation-Maximisation </p>
 
 <p align="center">
     <a href="https://2022.ecmlpkdd.org/wp-content/uploads/2022/09/sub_441.pdf"><img src="https://img.shields.io/badge/ECML%202022-d6782c"></a>
